@@ -1,0 +1,13 @@
+[package]
+name = "imgsort"
+version = "1.0.0"
+authors = ["Emanuele Bovisio"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+kamadak-exif = "0.5.4"
+clap = "~2.27.0"
+chrono = "0.4"
+sha1 = "0.10.5"
