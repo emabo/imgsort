@@ -5,8 +5,9 @@ use std::io::BufReader;
 
 
 
-const PARSERS: [&'static str; 11] = ["%Y:%m:%d %H:%M:%S",
+const PARSERS: [&'static str; 12] = ["%Y:%m:%d %H:%M:%S",
                                      "IMG-%Y%m%d-WA%f",    // IMG-20160807-WA0001.jpg
+                                     "IMG-%Y%m%d-WA%f_01", // IMG-20160807-WA0001_01.jpg
                                      "PANO_%Y%m%d_%H%M%S", // PANO_20190427_115542.jpg
                                      "IMG_%Y%m%d_%H%M%S",  // IMG_20190426_102645.jpg
                                      "IMG_%Y-%m-%d-%f",    // IMG_2016-08-16-19343585.png
