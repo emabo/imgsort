@@ -14,7 +14,38 @@ use chrono::NaiveDate;
 use imgsort::{extract_date, extract_date_from_filename, Stats, Options};
 
 
-fn compute_hash(filename: &str) -> String { 
+fn find_existing_date_dir(base_path: &Path, year_path: &str, date_prefix: &str) -> Option<String> {
+    // Search for a directory matching YEAR_MONTH_DAY or YEAR_MONTH_DAY.suffix
+    let year_dir = base_path.join(year_path);
+
+    if !year_dir.exists() || !year_dir.is_dir() {
+        return None;
+    }
+
+    if let Ok(entries) = fs::read_dir(&year_dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                if entry.file_type().unwrap().is_dir() {
+                    let dir_name = entry.file_name();
+                    let dir_name_str = dir_name.to_str().unwrap();
+
+                    // Check if the directory starts with the date prefix
+                    if dir_name_str == date_prefix {
+                        // Exact match
+                        return Some(dir_name_str.to_string());
+                    } else if dir_name_str.starts_with(&format!("{}.", date_prefix)) {
+                        // Match with suffix after dot
+                        return Some(dir_name_str.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn compute_hash(filename: &str) -> String {
     let mut file = File::open(filename).unwrap();
     let mut hasher = Sha1::new();
 
@@ -97,7 +128,22 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
         }
 
         let orig_path = Path::new(&opts.dir_to);
-        let new_dir = format!("{}/{:04}_{:02}_{:02}/", date.year(), date.year(), date.month(), date.day());
+        let year_dir = format!("{:04}", date.year());
+        let date_prefix = format!("{:04}_{:02}_{:02}", date.year(), date.month(), date.day());
+
+        // Check if a directory with this prefix already exists (with or without suffix)
+        let dir_name = match find_existing_date_dir(&orig_path, &year_dir, &date_prefix) {
+            Some(existing_dir) => {
+                if opts.verbose { println!("Found existing directory: {}", existing_dir) }
+                existing_dir
+            },
+            None => {
+                // No existing directory, use standard name
+                date_prefix.clone()
+            }
+        };
+
+        let new_dir = format!("{}/{}/", year_dir, dir_name);
         let mut full_filename_to = orig_path.join(&new_dir);
 
         if !full_filename_to.exists() {
