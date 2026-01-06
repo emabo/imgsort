@@ -5,18 +5,20 @@ use std::io::BufReader;
 
 
 
-const PARSERS: [&'static str; 12] = ["%Y:%m:%d %H:%M:%S",
-                                     "IMG-%Y%m%d-WA%f",    // IMG-20160807-WA0001.jpg
-                                     "IMG-%Y%m%d-WA%f_01", // IMG-20160807-WA0001_01.jpg
-                                     "PANO_%Y%m%d_%H%M%S", // PANO_20190427_115542.jpg
-                                     "IMG_%Y%m%d_%H%M%S",  // IMG_20190426_102645.jpg
-                                     "IMG_%Y-%m-%d-%f",    // IMG_2016-08-16-19343585.png
-                                     "%Y%m%d_%H%M%S",      // 20160824_123058.jpg
-                                     "VID-%Y%m%d-WA%f",    // VID-20200208-WA0000.mp4
-                                     "VID_%Y%m%d_%H%M%S",  // VID_20190428_161901.mp4
-                                     "%Y%m%d_%H%M%S_%f",   // 20211208_104956_01.mp4
-                                     "%Y%m%d-WA%f",        // 20150511-WA0003.jpg
-                                     "%Y-%m-%d %H.%M.%S"]; // 2015-06-04 17.30.00.jpg
+const PARSERS: [&'static str; 14] = ["%Y:%m:%d %H:%M:%S",
+                                     "IMG-%Y%m%d-WA%f",       // IMG-20160807-WA0001.jpg
+                                     "IMG-%Y%m%d-WA%f_01",    // IMG-20160807-WA0001_01.jpg
+                                     "IMG-%Y%m%d-WA%f_1",     // IMG-20160807-WA0001_1.jpg
+                                     "IMG-%Y%m%d-WA%f_01_01", // IMG-20160807-WA0001_01_01.jpg
+                                     "PANO_%Y%m%d_%H%M%S",    // PANO_20190427_115542.jpg
+                                     "IMG_%Y%m%d_%H%M%S",     // IMG_20190426_102645.jpg
+                                     "IMG_%Y-%m-%d-%f",       // IMG_2016-08-16-19343585.png
+                                     "%Y%m%d_%H%M%S",         // 20160824_123058.jpg
+                                     "VID-%Y%m%d-WA%f",       // VID-20200208-WA0000.mp4
+                                     "VID_%Y%m%d_%H%M%S",     // VID_20190428_161901.mp4
+                                     "%Y%m%d_%H%M%S_%f",      // 20211208_104956_01.mp4
+                                     "%Y%m%d-WA%f",           // 20150511-WA0003.jpg
+                                     "%Y-%m-%d %H.%M.%S"];    // 2015-06-04 17.30.00.jpg
 
 pub struct Stats {
     pub tot: u32,
