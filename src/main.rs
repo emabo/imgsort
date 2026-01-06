@@ -9,6 +9,7 @@ use std::fs::{self, File, DirEntry};
 use std::path::Path;
 use sha1::{Sha1, Digest};
 use chrono::Datelike;
+use chrono::Timelike;
 use chrono::NaiveDate;
 
 use imgsort::{extract_date, extract_date_from_filename, Stats, Options};
@@ -72,7 +73,7 @@ fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry, &Options, &mut Stats), options:
 fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
     let path_tmp = entry.path();
     let full_filename_from = path_tmp.to_str().unwrap();
-    let mut date1 = NaiveDate::from_ymd_opt(2000,1,1).unwrap();
+    let mut date1 = NaiveDate::from_ymd_opt(2000,1,1).unwrap().and_hms_opt(0,0,0).unwrap();
     let mut date2 = NaiveDate::from_ymd_opt(2000,1,1).unwrap();
     let date1_present: bool;
     let date2_present: bool;
@@ -86,7 +87,13 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
     stats.inc_tot();
 
     let path_from = Path::new(&full_filename_from);
-    let filename_to = path_from.file_stem().unwrap().to_str().unwrap();
+    let mut filename_to = path_from
+        .file_stem()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let original_filename_base = filename_to.clone();
+    let mut renamed_due_to_conflict = false;
     if opts.verbose { println!("Filename prefix: {}", filename_to) }
 
     let result1 = extract_date(&full_filename_from, opts.verbose);
@@ -111,21 +118,33 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
             println!("WARN: {}", e);
         }
     }
-    if date1_present && date2_present && date1 != date2 { 
-        stats.inc_skipped();
-        println!("ERROR: Date from file and from filename are different, skipping image");
+    let chosen_date = if date1_present && date2_present && date1.date() != date2 {
+        if opts.prefer_metadata_on_conflict {
+            if opts.verbose { println!("Date conflict: using metadata date and renaming with %Y%m%d_%H%M%S"); }
+            filename_to = format!(
+                "{:04}{:02}{:02}_{:02}{:02}{:02}",
+                date1.year(), date1.month(), date1.day(),
+                date1.hour(), date1.minute(), date1.second()
+            );
+            if filename_to != original_filename_base {
+                renamed_due_to_conflict = true;
+            }
+            Some(date1)
+        } else {
+            stats.inc_skipped();
+            println!("ERROR: Date from file and from filename are different, skipping image");
+            None
+        }
     } else if !date1_present && !date2_present {
         stats.inc_skipped();
         println!("ERROR: Cannot extract date from file or filename");
-    }
-    else {
-        let date;
+        None
+    } else {
+        Some(if date1_present { date1 } else { date2.and_hms_opt(0,0,0).unwrap() })
+    };
 
-        if date1_present {
-            date = date1;
-        } else {
-            date = date2;
-        }
+    if let Some(date_time) = chosen_date {
+        let date = date_time.date();
 
         let orig_path = Path::new(&opts.dir_to);
         let year_dir = format!("{:04}", date.year());
@@ -145,6 +164,9 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
 
         let new_dir = format!("{}/{}/", year_dir, dir_name);
         let mut full_filename_to = orig_path.join(&new_dir);
+        let extension = path_from
+            .extension()
+            .map(|e| e.to_string_lossy().into_owned());
 
         if !full_filename_to.exists() {
             if !opts.dry_run { 
@@ -156,13 +178,13 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
         let mut done = false;
         while !done {
             if counter > 0 {
-                let extension = path_from.extension().unwrap();
                 let new_filename = format!("{}_{:02}", filename_to, counter);
                 full_filename_to.set_file_name(&new_filename);
-                full_filename_to.set_extension(extension);
+                if let Some(ext) = &extension { full_filename_to.set_extension(ext); }
                 println!("New filename: {}", new_filename);
             } else {
-                full_filename_to.push(path_from.file_name().unwrap().to_str().unwrap());
+                full_filename_to.set_file_name(&filename_to);
+                if let Some(ext) = &extension { full_filename_to.set_extension(ext); }
             }
 
             println!("Destination path: {}", full_filename_to.display());
@@ -191,6 +213,11 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
                 if counter > 0 {
                     if opts.verbose { println!("Renaming file from {} to {}", full_filename_from, full_filename_to.display()) }
                     stats.inc_renamed();
+                }
+                else if renamed_due_to_conflict && full_filename_to.file_name() != path_from.file_name() {
+                    if opts.verbose { println!("Renaming file (date conflict) from {} to {}", full_filename_from, full_filename_to.display()) }
+                    stats.inc_renamed();
+                    renamed_due_to_conflict = false;
                 }
                 if opts.copy {
                     if opts.verbose { println!("Copy {} to {}", full_filename_from, full_filename_to.display()) }
@@ -228,9 +255,10 @@ fn main() {
         (@arg recursive: -r --recursive "Recursively visit subdirectories")
         (@arg max_depth: -m --max_depth +takes_value "Visit maximum max_depth levels in recursion")
         (@arg verbose: -v --verbose "Print information verbosely")
+        (@arg prefer_metadata: --prefer_metadata "On date conflicts, use metadata date and rename with %Y%m%d_%H%M%S")
     ).get_matches();
  
-    let mut options = Options { dir_from: "".to_string(), dir_to: "".to_string(), copy: true, dry_run: false, recursive: false, max_depth: 0, verbose: false };
+    let mut options = Options { dir_from: "".to_string(), dir_to: "".to_string(), copy: true, dry_run: false, recursive: false, max_depth: 0, verbose: false, prefer_metadata_on_conflict: false };
     options.dir_from = matches.value_of("from").unwrap_or(".").to_string();
     options.dir_to = matches.value_of("to").unwrap_or(".").to_string();
     options.copy = matches.is_present("copy");
@@ -238,6 +266,7 @@ fn main() {
     options.recursive = matches.is_present("recursive");
     options.max_depth = value_t!(matches.value_of("max_depth"), u32).unwrap_or(0);
     options.verbose = matches.is_present("verbose");
+    options.prefer_metadata_on_conflict = matches.is_present("prefer_metadata");
 
     let mut file_stats = Stats { tot: 0, copied: 0, moved: 0, renamed: 0, already_present: 0, skipped: 0 };
 

@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use exif::{DateTime as ExifDateTime, In, Reader, Value, Tag};
 use std::fs::File;
 use std::io::BufReader;
@@ -69,11 +69,14 @@ pub struct Options {
     pub dry_run: bool,
     pub recursive: bool,
     pub max_depth: u32,
-    pub verbose: bool
+    pub verbose: bool,
+    pub prefer_metadata_on_conflict: bool,
 }
 
-pub fn extract_date(filename: &str, verbose: bool) -> Result<NaiveDate, String> {
-    let mut date = NaiveDate::from_ymd_opt(2000,1,1).unwrap();
+pub fn extract_date(filename: &str, verbose: bool) -> Result<NaiveDateTime, String> {
+    let default_date = NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+    let default_time = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
+    let mut date_time = NaiveDateTime::new(default_date, default_time);
     let mut found = false;
     let file = File::open(filename).unwrap();
 
@@ -100,7 +103,9 @@ pub fn extract_date(filename: &str, verbose: bool) -> Result<NaiveDate, String> 
                 Value::Ascii(ref vec) if !vec.is_empty() => {
                     if let Ok(datetime) = ExifDateTime::from_ascii(&vec[0]) {
                         found = true;
-                        date = NaiveDate::from_ymd_opt(datetime.year.into(), datetime.month.into(), datetime.day.into()).unwrap();
+                        let date = NaiveDate::from_ymd_opt(datetime.year.into(), datetime.month.into(), datetime.day.into()).unwrap();
+                        let time = NaiveTime::from_hms_opt(datetime.hour.into(), datetime.minute.into(), datetime.second.into()).unwrap_or(default_time);
+                        date_time = NaiveDateTime::new(date, time);
                     }
                 },
                 _ => {},
@@ -108,7 +113,7 @@ pub fn extract_date(filename: &str, verbose: bool) -> Result<NaiveDate, String> 
         }
     }
     if found {
-        Ok(date)
+        Ok(date_time)
     } else {
         Err("Date from file not found".to_string())
     }
