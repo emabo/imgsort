@@ -162,30 +162,35 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
             }
         };
 
-        let new_dir = format!("{}/{}/", year_dir, dir_name);
-        let mut full_filename_to = orig_path.join(&new_dir);
         let extension = path_from
             .extension()
             .map(|e| e.to_string_lossy().into_owned());
+        let base_dir = orig_path.join(&year_dir).join(&dir_name);
 
-        if !full_filename_to.exists() {
+        if !base_dir.exists() {
             if !opts.dry_run { 
-                if opts.verbose { println!("Create new directory: {}", full_filename_to.display()) }
-                fs::create_dir_all(&full_filename_to).unwrap_or_else(|e| panic!("ERROR: creating dir: {}", e));
+                if opts.verbose { println!("Create new directory: {}", base_dir.display()) }
+                fs::create_dir_all(&base_dir).unwrap_or_else(|e| panic!("ERROR: creating dir: {}", e));
             }
         }
         let mut counter = 0;
         let mut done = false;
         while !done {
-            if counter > 0 {
+            let candidate_name = if counter > 0 {
                 let new_filename = format!("{}_{:02}", filename_to, counter);
-                full_filename_to.set_file_name(&new_filename);
-                if let Some(ext) = &extension { full_filename_to.set_extension(ext); }
-                println!("New filename: {}", new_filename);
+                if opts.verbose { println!("New filename: {}", new_filename); }
+                new_filename
             } else {
-                full_filename_to.set_file_name(&filename_to);
-                if let Some(ext) = &extension { full_filename_to.set_extension(ext); }
-            }
+                filename_to.clone()
+            };
+
+            let final_name = if let Some(ext) = &extension {
+                format!("{}.{}", candidate_name, ext)
+            } else {
+                candidate_name.clone()
+            };
+
+            let full_filename_to = base_dir.join(&final_name);
 
             println!("Destination path: {}", full_filename_to.display());
             if full_filename_to.exists() {
