@@ -20,6 +20,35 @@ const PARSERS: [&'static str; 14] = ["%Y:%m:%d %H:%M:%S",
                                      "%Y%m%d-WA%f",           // 20150511-WA0003.jpg
                                      "%Y-%m-%d %H.%M.%S"];    // 2015-06-04 17.30.00.jpg
 
+pub struct ExtensionCount {
+    pub counts: std::collections::HashMap<String, u32>,
+}
+
+impl ExtensionCount {
+    pub fn new() -> Self {
+        ExtensionCount {
+            counts: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn add(&mut self, ext: &str) {
+        *self.counts.entry(ext.to_string()).or_insert(0) += 1;
+    }
+
+    pub fn print(&self) {
+        if self.counts.is_empty() {
+            println!("No files found by extension.");
+            return;
+        }
+        println!("\n\nFile count by extension:");
+        let mut sorted: Vec<_> = self.counts.iter().collect();
+        sorted.sort_by_key(|&(_, count)| std::cmp::Reverse(*count));
+        for (ext, count) in sorted {
+            println!("  {}: {}", if ext.is_empty() { "(no extension)" } else { ext }, count);
+        }
+    }
+}
+
 pub struct Stats {
     pub tot: u32,
     pub copied: u32,
@@ -73,6 +102,7 @@ pub struct Options {
     pub max_depth: u32,
     pub verbose: bool,
     pub prefer_metadata_on_conflict: bool,
+    pub count_extensions: bool,
 }
 
 pub fn extract_date(filename: &str, verbose: bool) -> Result<NaiveDateTime, String> {

@@ -12,7 +12,7 @@ use chrono::Datelike;
 use chrono::Timelike;
 use chrono::NaiveDate;
 
-use imgsort::{extract_date, extract_date_from_filename, Stats, Options};
+use imgsort::{extract_date, extract_date_from_filename, Stats, Options, ExtensionCount};
 
 
 fn find_existing_date_dir(base_path: &Path, year_path: &str, date_prefix: &str) -> Option<String> {
@@ -55,22 +55,22 @@ fn compute_hash(filename: &str) -> String {
     return format!("{:x}", hasher.finalize());
 }
 
-fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry, &Options, &mut Stats), options: &Options, file_stats: &mut Stats, depth: u32) -> io::Result<()> {
+fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry, &Options, &mut Stats, &mut ExtensionCount), options: &Options, file_stats: &mut Stats, ext_count: &mut ExtensionCount, depth: u32) -> io::Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() && (depth < options.max_depth || options.recursive) {
-                visit_dirs(&path, cb, &options, file_stats, depth + 1)?;
+                visit_dirs(&path, cb, &options, file_stats, ext_count, depth + 1)?
             } else {
-                cb(&entry, &options, file_stats);
+                cb(&entry, &options, file_stats, ext_count);
             }
         }
     }
     Ok(())
 }
 
-fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
+fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats, ext_count: &mut ExtensionCount) {
     let path_tmp = entry.path();
     let full_filename_from = path_tmp.to_str().unwrap();
     let mut date1 = NaiveDate::from_ymd_opt(2000,1,1).unwrap().and_hms_opt(0,0,0).unwrap();
@@ -82,11 +82,23 @@ fn compute_file(entry: &DirEntry, opts: &Options, stats: &mut Stats) {
         return;
     }
 
+    let path_from = Path::new(&full_filename_from);
+
+    // If only counting extensions, just track and return
+    if opts.count_extensions {
+        let ext = path_from
+            .extension()
+            .map(|e| e.to_string_lossy().to_string())
+            .unwrap_or_default();
+        ext_count.add(&ext);
+        stats.inc_tot();
+        return;
+    }
+
     println!("\nFilename: {}", full_filename_from);
 
     stats.inc_tot();
 
-    let path_from = Path::new(&full_filename_from);
     let mut filename_to = path_from
         .file_stem()
         .unwrap()
@@ -261,9 +273,10 @@ fn main() {
         (@arg max_depth: -m --max_depth +takes_value "Visit maximum max_depth levels in recursion")
         (@arg verbose: -v --verbose "Print information verbosely")
         (@arg prefer_metadata: --prefer_metadata "On date conflicts, use metadata date and rename with %Y%m%d_%H%M%S")
+        (@arg count_extensions: --count_extensions "Count files by extension")
     ).get_matches();
  
-    let mut options = Options { dir_from: "".to_string(), dir_to: "".to_string(), copy: true, dry_run: false, recursive: false, max_depth: 0, verbose: false, prefer_metadata_on_conflict: false };
+    let mut options = Options { dir_from: "".to_string(), dir_to: "".to_string(), copy: true, dry_run: false, recursive: false, max_depth: 0, verbose: false, prefer_metadata_on_conflict: false, count_extensions: false };
     options.dir_from = matches.value_of("from").unwrap_or(".").to_string();
     options.dir_to = matches.value_of("to").unwrap_or(".").to_string();
     options.copy = matches.is_present("copy");
@@ -272,15 +285,19 @@ fn main() {
     options.max_depth = value_t!(matches.value_of("max_depth"), u32).unwrap_or(0);
     options.verbose = matches.is_present("verbose");
     options.prefer_metadata_on_conflict = matches.is_present("prefer_metadata");
+    options.count_extensions = matches.is_present("count_extensions");
 
     let mut file_stats = Stats { tot: 0, copied: 0, moved: 0, renamed: 0, already_present: 0, skipped: 0 };
-
+    let mut ext_count = ExtensionCount::new();
 
     println!("Value for from: {}", options.dir_from);
     let path = Path::new(&options.dir_from);
     let depth = 0;
 
-    let _result = visit_dirs(path, &compute_file, &options, &mut file_stats, depth);
+    let _result = visit_dirs(path, &compute_file, &options, &mut file_stats, &mut ext_count, depth);
 
     file_stats.print_all();
+    if options.count_extensions {
+        ext_count.print();
+    }
 }
